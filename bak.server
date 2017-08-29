@@ -1,0 +1,64 @@
+# Servidor do Clone do Dropbox
+from flask import Flask, send_file
+import cPickle as pickle
+import os
+app = Flask(__name__)
+users ={'usuario':'hash'}
+
+@app.route('/<user>/<psswd>/auth')
+def auth(user, psswd):
+    try: users = pickle.load(open('users.p','rb'))
+    except: users = {} 
+    if user not in users:
+        users[user] = psswd
+        try:
+            os.makedirs('./myDropboxServer/'+user+'/')
+        except:
+            return 'False'
+        pickle.dump(users, open('users.p','wb'))
+        return 'True'
+    if users[user] != psswd: return 'False'
+    return 'True'
+
+@app.route('/<user>/<psswd>/list')
+def get_list(user, psswd):
+    '''Funcao que lida com requests de listagem de arquivos'''
+    if auth(user,psswd) != 'True': return 'Falha na autenticacao.'
+    files = {}
+    userpath = './myDropboxServer/'+user+'/'
+    file_list = os.listdir(userpath)
+    print file_list
+    for f in file_list:
+        try: 
+            files[f] = os.stat(userpath+f).st_mtime
+        except Exception as error: 
+            files[f] = 0
+    
+    pickle.dump(files, open(userpath+'files.p','wb'))
+    return send_file(userpath+'files.p')
+
+@app.route('/<user>/<psswd>/download/<item>')
+def download(user, psswd, item):
+    '''Funcao que lida com requests de download'''
+    if auth(user,psswd) != 'True': return 'Falha na autenticacao.'
+    userpath = './myDropboxServer/'+user+'/'
+    return send_file(userpath+item)
+
+@app.route('/<user>/<psswd>/upload/<item>/<content>') #nao testado
+def upload(user, psswd, item, content):
+    '''Funcao que lida com requests de upload'''
+    if auth(user,psswd) != 'True': return 'Falha na autenticacao.'
+    content_bytes = content.split()
+    
+    #checando existencia da pasta do usuario
+    userpath = './myDropboxServer/'+user+'/'
+    
+    if not os.path.exists(userpath):
+        os.makedirs(userpath)
+        
+    with open(userpath+item,'wb') as uploaded_file:
+        for byte in content_bytes:
+            uploaded_file.write(chr(int(byte)))
+
+if __name__ == '__main__':
+    app.run(host='127.0.0.1')

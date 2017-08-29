@@ -1,0 +1,123 @@
+# falta testar download e upload
+# Cliente do Clone do Dropbox
+import os, hashlib, urllib, pickle
+from time import sleep
+from getpass import getpass
+from flask import send_file
+
+# configs
+url = 'http://127.0.0.1:5000' # servidor
+path = '.' # pasta atual
+t = 5 # segundos de espera
+
+#functions
+def auth(user, psswd):
+    '''Envia usuario e hash para o servidor a fim de descobrir se o usuario esta ou nao autenticado'''
+    authorized = False
+    try:
+        authorized = eval(urllib.urlopen(url+"/"+user+"/"+psswd+"/auth").read())
+    except:
+        authorized = False
+        print '\'except:'+str(authorized)+'\''
+    if not authorized: print "Falha na autenticacao. \n"
+    return authorized
+
+def pull(user, psswd, changes):
+    if not changes: return
+    for item in changes: download(user, psswd, item)
+    return
+
+def server_changes(user, psswd):
+    try:
+        new = urllib.urlopen(url+"/"+user+"/"+psswd+"/list")
+        new = new.read()
+        userpath = './myDropboxClient/'+user+'/'
+        with open(userpath+'new.p','wb') as new_file:
+            new_file.write(new)
+        new = pickle.load(open(userpath+'new.p','rb'))
+    except Exception as error:
+        new = old
+    if new == old: return False
+    return diffs(new)
+
+def download(user, psswd, item): # nao testado
+    if item == 'files.p':
+        return
+    print 'Baixando novo arquivo,', item
+    try:
+        userpath = './myDropboxClient/'+user+'/'
+        if not os.path.exists(userpath):
+            os.makedirs(userpath)
+        with open(userpath+item,'wb') as downloaded_file:
+            new_file.write(urllib.urlopen(url+"/"+user+"/"+psswd+"/download/"+item).read())
+    except:
+        return 'Nao foi possivel baixar o arquivo'
+    return
+
+def diffs(new):
+    '''Retorna uma listagem com os nomes dos arquivos a serem baixados'''
+    global old
+    changes = []
+    for key in new:
+        try:
+            old[key]
+        except:
+            changes.append(key)
+            continue
+        if old[key] != new[key]: changes.append(key)
+    old = new
+    return changes
+
+def push(user, psswd, changes):
+    if not changes: return
+    for item in changes: upload(user, psswd, item)
+    return
+
+def local_changes(user):
+    '''Checa se existe alguma mudanca no diretorio sendo observado'''
+    files = {}
+    userpath = './myDropboxClient/'+user+'/'
+    if not os.path.exists(userpath):
+        os.makedirs(userpath)
+    for f in os.listdir(userpath):
+        try: files[f] = os.stat(f).st_mtime
+        except: 
+            try:
+                files[f] = old[f]
+            except:
+                files[f] = 0
+    if files == old: return False
+    return diffs(files)
+
+
+def upload(user, psswd, item): 
+    print 'Fazendo upload de novo arquivo: ', item
+    userpath = './myDropboxClient/'+user+'/'
+    if not os.path.exists(userpath):
+        os.makedirs(userpath)
+    with open(userpath+item,'rb') as upload_file:
+        content = []
+        for line in upload_file.readlines():
+            for byte in line:
+                content.append(ord(byte))
+        urllib.urlopen(url+"/"+user+"/"+psswd+"/upload/"+item+"/"+" ".join(content))
+    return
+
+def main():
+    global old
+    # auth
+    logged = False
+    while not logged:
+        user = raw_input("Usuario: ")
+        psswd = hashlib.sha512(getpass("Senha: ")).hexdigest()
+        logged = auth(user, psswd)
+
+    # main loop
+    while True:
+        pull(user, psswd, server_changes(user, psswd))
+        push(user, psswd, local_changes(user))
+        sleep(t)
+
+if __name__ == "__main__": 
+    old = {}
+    main()
